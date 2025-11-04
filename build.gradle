@@ -1,0 +1,29 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+group = 'com.example'
+version = '1.0-SNAPSHOT'
+sourceCompatibility = '21'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.10.1'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.10.1'
+
+    testImplementation 'camp.nextstep.edu.missionutils:missionutils-java:2.0.0'
+
+    testImplementation 'org.assertj:assertj-core:3.24.2'
+}
+
+application {
+    mainClass = 'com.example.game.Main' // 시작할 메인 클래스 경로로 수정하세요.
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
