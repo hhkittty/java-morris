@@ -12,7 +12,6 @@ public class MorrisClient {
     private ObjectInputStream input;
     private GameFrame gameFrame;
     int playerID = -1;
-    //private GamePhase currentPhase=GamePhase.PLACING;
 
     public MorrisClient(String serverAddress, int port) throws IOException {
         System.out.println("서버에 연결 시도 중...");
@@ -79,7 +78,7 @@ public class MorrisClient {
         try {
             output.writeObject(move);
             output.flush();
-            System.out.println("서버로 GameMove 전송: " + move.gamePhase+" "+move.clickIndex);
+            System.out.println("서버로 GameMove 전송:"+move.clickIndex);
         } catch (IOException e) {
             System.err.println("게임 이동 전송 실패: " + e.getMessage());
         }
@@ -95,7 +94,6 @@ public class MorrisClient {
                         String serverMessage = (String) receivedData;
                         System.out.println("<< 서버 응답 >> " + serverMessage);
 
-                        updatePhase(serverMessage);
                         if (serverMessage.contains("PLACING Success")) {
                             System.out.println("화면 업데이트.");
                             String[] parts = serverMessage.split(";");
@@ -177,7 +175,6 @@ public class MorrisClient {
             gameFrame.getBoardView().repaint();
         });
     }
-
     private void updateCancle() {
         SwingUtilities.invokeLater(() -> {
             gameFrame.getGameBoard().setSelectedNode(-1);
@@ -187,34 +184,11 @@ public class MorrisClient {
     private void updateRemove(int index) {
         SwingUtilities.invokeLater(() -> {
             gameFrame.getGameBoard().remove(index);
+            gameFrame.getBoardView().revalidate();
             gameFrame.getBoardView().repaint();
         });
     }
-
     private void setGameFrame(GameFrame gameFrame) {
         this.gameFrame = gameFrame;
-    }
-
-    private void updatePhase(String message) {
-        GamePhase phase;
-        if(message.equals("PLACING Phase")) {
-            phase = GamePhase.PLACING;
-        } else if (message.equals("MOVING Phase")) {
-            phase = GamePhase.MOVING;
-        } else if (message.equals("Mill")) {
-            phase = GamePhase.REMOVE;
-            System.out.println("제거할 돌을 고르세요");
-        } else if (message.contains("JUMP Phase")) {
-            phase = GamePhase.JUMP;
-        }else if(message.contains("END")) {
-            phase = GamePhase.END;
-        }else{
-            phase=null;
-        }
-        if (phase != null && gameFrame != null) {
-            SwingUtilities.invokeLater(() -> {
-                gameFrame.getGameBoard().setPhase(phase);
-            });
-        }
     }
 }

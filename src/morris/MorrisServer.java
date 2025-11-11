@@ -18,7 +18,7 @@ public class MorrisServer {
     private static GameBoard masterGameBoard = new GameBoard();
     private static RuleChecker rule = new RuleChecker();
     private static Map<Integer, Integer> selectedNodes = new ConcurrentHashMap<>();
-    private static int MaxPlacedPiece=18;
+    private static int MaxPlacedPiece=8;
 
     public static void main(String[] args) throws IOException {
         ServerSocket serverSocket = new ServerSocket(9000); // 9000번 포트
@@ -67,24 +67,29 @@ public class MorrisServer {
     public static synchronized void handleClientMove(GameMove move, int playerID) throws IOException {
         int index = move.clickIndex;
         GamePhase phase=masterGameBoard.getPhase();
-        System.out.println(phase);
-
         Piece currentPlayer = Piece.fromServerID(playerID);
+        Piece opponentPlayer = Piece.fromServerID(3 - playerID);
 
         if (phase == GamePhase.PLACING) {
-            boolean isPlace=masterGameBoard.placePiece(index, currentPlayer);
-            if(!isPlace) {
+            //boolean isPlace=masterGameBoard.placePiece(index, currentPlayer);
+            boolean canPlace=rule.canPlace(
+                    index,
+                    masterGameBoard.getNodes(),
+                    masterGameBoard.getpiecesPlaced(),
+                    MaxPlacedPiece
+            );
+            if(!canPlace) {
                 handlers.get(playerID-1).sendMessage("빈 공간을 선택해 주세요.");
             }
             else {
+                masterGameBoard.placePiece(index,currentPlayer);
                 broadcastMessage(currentPlayer + ";" + index + ";" + phase + " Success");
                 if (!rule.isMill(index, masterGameBoard.getNodes())) {
                     switchTurn();
-                    System.out.println(masterGameBoard.getpiecesPlaced());
                 }
                 else {
                     masterGameBoard.setPhase(GamePhase.REMOVE);
-                    broadcastMessage("Mill");
+                    broadcastMessage("Mill 성공💣");
                 }
                 if (masterGameBoard.getpiecesPlaced() == MaxPlacedPiece && masterGameBoard.getPhase()!=GamePhase.REMOVE) {
                     broadcastMessage("--말놓기 종료--");
@@ -104,24 +109,25 @@ public class MorrisServer {
                 }
             }
             else {
-                if (selectedNodes.get(playerID) == index) {
+                int fromIndex=selectedNodes.get(playerID);
+                if (fromIndex == index) {
                     handlers.get(playerID - 1).sendMessage("돌 선택을 취소합니다");
                     selectedNodes.remove(playerID);
                     masterGameBoard.setSelectedNode(-1);
                 }
                 else {
-                    boolean isMoving = masterGameBoard.movingPiece(selectedNodes.get(playerID), index);
-                    Piece opponentPlayer = Piece.fromServerID(3 - playerID);
-                    if (!isMoving) {
+                    boolean canMove=rule.canMove(fromIndex,index,masterGameBoard.getNodes());
+                    if (!canMove) {
                         broadcastMessage("이동할 수 없습니다. 다시 선택해 주세요.");
                     }
                     else {
-                        broadcastMessage("Move Success:" + selectedNodes.get(playerID) + "to" + index);
+                        masterGameBoard.movingPiece(fromIndex,index);
+                        broadcastMessage("Move Success:" + fromIndex + "to" + index);
                         selectedNodes.remove(playerID);
                         Piece[] nodes = masterGameBoard.getNodes();
                         if (rule.isMill(index, nodes)) {
                             masterGameBoard.setPhase(GamePhase.REMOVE);
-                            broadcastMessage("Mill");
+                            broadcastMessage("Mill 성공💣");
                         } else if (rule.countPieces(opponentPlayer, nodes) == 3) {
                             masterGameBoard.setPhase(GamePhase.JUMP);
                             broadcastMessage("JUMP Phase");
@@ -136,40 +142,38 @@ public class MorrisServer {
             }
         }
         else if (phase == GamePhase.REMOVE) {
-            boolean isRemove = masterGameBoard.remove(index);
             Piece[] nodes = masterGameBoard.getNodes();
-            if (isRemove) {
+            boolean canRemove=rule.canRemove(nodes,index,opponentPlayer);
+
+            if (canRemove) {
+                masterGameBoard.remove(index);
                 broadcastMessage("REMOVE:" + index + ":" + playerID);
-                masterGameBoard.setPhase(GamePhase.MOVING);
-                broadcastMessage("MOVING Phase");
-                nodes[index] = Piece.NONE;
-                Piece opponentPlayer = (currentPlayer == Piece.BLACK) ? Piece.WHITE : Piece.BLACK;
+                nodes=masterGameBoard.getNodes();
                 if(masterGameBoard.getpiecesPlaced()<MaxPlacedPiece){
                     masterGameBoard.setPhase(GamePhase.PLACING);
                     broadcastMessage("PLACING Phase");
                 }
-                if (rule.countPieces(opponentPlayer, nodes) == 3 && masterGameBoard.getpiecesPlaced()==MaxPlacedPiece) {
+                else if (rule.isDefeat(opponentPlayer, nodes)){
+                    broadcastMessage(opponentPlayer + "의 돌이 2개남았습니다. " + currentPlayer + " 승리🎉");
+                    masterGameBoard.setPhase(GamePhase.END);
+                    broadcastMessage("GAME END");
+                }
+                else if (rule.isJump(opponentPlayer, nodes)) {
                     broadcastMessage(opponentPlayer + "돌이 3개 남았습니다. 자유롭게 이동이 가능합니다.");
                     masterGameBoard.setPhase(GamePhase.JUMP);
-                    switchTurn();
                     if (currentPlayer == Piece.BLACK) {
                         broadcastMessage("JUMP Phase for WHITE");
                     } else {
                         broadcastMessage("JUMP Phase for BLACK");
                     }
                 }
-                else if (rule.isDefeat(opponentPlayer, nodes)&& masterGameBoard.getpiecesPlaced()==MaxPlacedPiece) {
-                    broadcastMessage(opponentPlayer + "의 돌이 2개남았습니다. " + currentPlayer + " 승리🎉");
-                    masterGameBoard.setPhase(GamePhase.END);
-                    broadcastMessage("GAME END");
-                }
                 else{
-                    switchTurn();
+                    masterGameBoard.setPhase(GamePhase.MOVING);
+                    broadcastMessage("MOVING Phase");
                 }
+                switchTurn();
             } else {
-                Piece opponent = Piece.fromServerID(3 - playerID);
-
-                if (rule.isInMill(index, nodes) && opponent == nodes[index]) {
+                if (rule.isInMill(index, nodes) && opponentPlayer == nodes[index]) {
                     handlers.get(playerID - 1).sendMessage("Mill에 포함되어있습니다. 다른 돌을 먼저 선택해주세요.");
                 } else {
                     handlers.get(playerID - 1).sendMessage("상대방 돌을 선택해주세요.");
@@ -177,7 +181,6 @@ public class MorrisServer {
             }
         }
         else if (phase == GamePhase.JUMP) {
-            Piece opponentPlayer = currentPlayer == Piece.BLACK ? Piece.WHITE : Piece.BLACK;
             Piece[] nodes = masterGameBoard.getNodes();
             if (!selectedNodes.containsKey(playerID)) {
                 if (masterGameBoard.isCurrentPlayerPiece(index)) {
@@ -188,15 +191,18 @@ public class MorrisServer {
                     handlers.get(playerID - 1).sendMessage("본인 돌을 선택해 주세요.");
                 }
             } else {
-                if (selectedNodes.get(playerID) == index) {
+                int fromIndex = selectedNodes.get(playerID);
+                if (fromIndex == index) {
                     handlers.get(playerID - 1).sendMessage("돌 선택을 취소합니다");
                     selectedNodes.remove(playerID);
                     masterGameBoard.setSelectedNode(-1);
                 } else {
-                    boolean isJuming = masterGameBoard.jumpingPiece(selectedNodes.get(playerID), index);
-                    if (!isJuming) {
+                    boolean canJump=rule.canJump(index,nodes);
+                    //boolean isJuming = masterGameBoard.jumpingPiece(selectedNodes.get(playerID), index);
+                    if (!canJump) {
                         broadcastMessage("이동할 수 없습니다. 다시 선택해 주세요.");
                     } else {
+                        masterGameBoard.jumpingPiece(fromIndex, index);
                         broadcastMessage("Jump Success:" + selectedNodes.get(playerID) + "to" + index);
                         selectedNodes.remove(playerID);
                         nodes = masterGameBoard.getNodes();

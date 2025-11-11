@@ -75,18 +75,58 @@ public class RuleChecker {
     }
 
     public boolean isJump(Piece currentPlayer, Piece[] nodes) {
-        return countPieces(currentPlayer, nodes) <= 3;
+        return countPieces(currentPlayer, nodes) == 3;
     }
 
     public boolean isDefeat(Piece currentPlayer, Piece[] nodes) {
         return countPieces(currentPlayer, nodes) == 2;
     }
 
-    public int[][] getConnections() {
-        return Arrays.copyOf(CONNECTIONS, CONNECTIONS.length);
+    public boolean canPlace(int index, Piece[]nodes,int piecesPlaced,int maxPlacedPiece){
+        if (piecesPlaced >= maxPlacedPiece || nodes[index] != Piece.NONE) {
+            return false;
+        }
+        return true;
+    }
+    public boolean canRemove(Piece[] nodes,int index,Piece player) {
+        if (nodes[index] != player) {
+            return false;
+        }
+        if (isInMill(index,nodes)) {
+            return allPiecesAreInMill(player, nodes);
+        }
+        return true;
     }
 
-    public int[][] getMillConnections() {
-        return Arrays.copyOf(MILL_CONNECTIONS, MILL_CONNECTIONS.length);
+    public boolean canMove(int fromIndex,int toIndex,Piece nodes[]){
+        if (!isAdjacent(fromIndex, toIndex)) {
+            System.out.println("연결된 칸을 선택해 주세요.");
+            return false;
+        }
+        if (nodes[toIndex] != Piece.NONE) {
+            System.out.println("비어있는 칸을 선택해 주세요.");
+            return false;
+        }
+        return true;
+    }
+
+    public boolean canJump(int toIndex,Piece nodes[]){
+        if (nodes[toIndex] != Piece.NONE) {
+            return false;
+        }
+        return true;
+    }
+    private static final boolean[][] ADJACENCY_MATRIX = new boolean[24][24];
+    public boolean isAdjacent(int fromIndex, int toIndex) {
+        return ADJACENCY_MATRIX[fromIndex][toIndex];
+    }
+    public void initializeAdjacencyMatrix() {
+        for (int[] connection : CONNECTIONS) {
+            int i = connection[0];
+            int j = connection[1];
+
+            ADJACENCY_MATRIX[i][j] = true; // 0 -> 1 연결
+            ADJACENCY_MATRIX[j][i] = true; // 1 -> 0 연결
+        }
     }
 }
