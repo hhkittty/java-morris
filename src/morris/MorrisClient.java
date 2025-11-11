@@ -71,7 +71,7 @@ public class MorrisClient {
     }
 
     public String readServerMessage() throws IOException, ClassNotFoundException {
-        return input.readObject().toString(); // 인스턴스 input을 사용
+        return input.readObject().toString();
     }
 
     public void sendGameMove(GameMove move) {

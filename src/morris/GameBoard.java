@@ -4,7 +4,6 @@ import java.util.Arrays;
 
 public class GameBoard {
     private final Piece[] nodes = new Piece[24];
-    private Piece currentPlayer = Piece.BLACK;
     private int piecesPlaced = 0;
     private int selectedNodeIndex = -1;
     private GamePhase currentPhase = GamePhase.PLACING;
@@ -37,14 +36,10 @@ public class GameBoard {
         this.nodes[index]=pieceType;
     }
 
-    public boolean placePiece(int index,Piece currentPlayer) {
-        /*if (piecesPlaced >= 18 || nodes[index] != Piece.NONE) {
-            return false;
-        }*/
-        nodes[index] = currentPlayer;
+    public boolean placePiece(int index,Piece player) {
+        nodes[index] = player;
         piecesPlaced++;
         System.out.println("Piece placed: " + index);
-        changeTurn();
         return true;
     }
 
@@ -56,29 +51,21 @@ public class GameBoard {
         return nodes[index];
     }
 
-    private void changeTurn() {
-        currentPlayer = (currentPlayer == Piece.BLACK) ? Piece.WHITE : Piece.BLACK;
-    }
-
     public boolean movingPiece(int fromIndex, int toIndex) {
         nodes[toIndex] = nodes[fromIndex];
         nodes[fromIndex] = Piece.NONE;
-        changeTurn();
         return true;
     }
-    public boolean isCurrentPlayerPiece(int index) {
-        return nodes[index] == currentPlayer;
+    public boolean isCurrentPlayerPiece(int index,Piece player) {
+        return nodes[index] == player;
     }
     public boolean remove(int index) {
             nodes[index] = Piece.NONE;
-            changeTurn();
             return true;
     }
-
     public boolean jumpingPiece(int fromIndex,int toIndex) {
         nodes[toIndex] = nodes[fromIndex];
         nodes[fromIndex] = Piece.NONE;
-        changeTurn();
         return true;
     }
 }
