@@ -1,4 +1,4 @@
-package morris;
+package morris.model;
 
 public enum Piece {
     NONE(0),

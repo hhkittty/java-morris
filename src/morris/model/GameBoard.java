@@ -1,4 +1,4 @@
-package morris;
+package morris.model;
 
 import java.util.Arrays;
 
@@ -46,6 +46,9 @@ public class GameBoard {
     public int getpiecesPlaced() {
         return piecesPlaced;
     }
+    public void setPiecesPlaced(int num) {
+        piecesPlaced = num;
+    }
 
     public Piece getPieceAt(int index) {
         return nodes[index];
@@ -67,6 +70,9 @@ public class GameBoard {
         nodes[toIndex] = nodes[fromIndex];
         nodes[fromIndex] = Piece.NONE;
         return true;
+    }
+    public void initializeBoard(){
+        Arrays.fill(nodes, Piece.NONE);
     }
 }
 

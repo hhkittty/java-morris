@@ -1,4 +1,4 @@
-package morris;
+package morris.controller;
 
 import java.io.Serializable;
 

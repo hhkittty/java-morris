@@ -1,11 +1,11 @@
-package morris;
+package morris.controller;
 
-import java.net.Socket;
 import javax.swing.JFrame;
 import javax.swing.*;
+import morris.model.GameBoard;
+import morris.view.BoardView;
 
 public class GameFrame extends JFrame {
-    private JTextArea messageArea;
     private BoardView boardView;
     private GameBoard gameBoard;
     private MorrisClient client;

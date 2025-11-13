@@ -1,6 +1,4 @@
-package morris;
-
-import java.util.Arrays;
+package morris.model;
 
 public class RuleChecker {
     private static final int[][] CONNECTIONS = {

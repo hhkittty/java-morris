@@ -1,27 +1,37 @@
-package morris;
+package morris.controller;
 
 
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import morris.model.GameBoard;
+import morris.model.GamePhase;
+import morris.model.Piece;
+import morris.model.RuleChecker;
 
 public class MorrisServer {
+    private static ServerSocket serverSocket;
     private static List<PlayerHandler> handlers = new CopyOnWriteArrayList<>();
     private static final int REQUIRED_PLAYERS = 2;
     private static volatile int readyCount = 0;
     private static final Object readyLock = new Object();
+    private static Object restartLock = new Object();
     static volatile int currentPlayerID = 1;
     private static GameBoard masterGameBoard = new GameBoard();
     private static RuleChecker rule = new RuleChecker();
     private static Map<Integer, Integer> selectedNodes = new ConcurrentHashMap<>();
     private static int MaxPlacedPiece=8;
+    private static Map<Integer, Boolean> playerReadyToRestart = new HashMap<>();
+    private static int winner=0;
+    private static int loser=0;
 
     public static void main(String[] args) throws IOException {
-        ServerSocket serverSocket = new ServerSocket(9000); // 9000번 포트
+        serverSocket = new ServerSocket(9000); // 9000번 포트
         System.out.println("나인 맨스 모리스 서버 시작...");
 
         Socket player1 = serverSocket.accept(); // 첫 번째 플레이어 대기
@@ -43,7 +53,11 @@ public class MorrisServer {
     private static void broadcastMessage(String message) throws IOException {
         for (PlayerHandler handler : handlers) {
             handler.sendMessage(message);
+
         }
+    }
+    private static void sendMessageToPlayer(int playerID,String message) throws IOException {
+        handlers.get(playerID-1).sendMessage(message);
     }
 
     public static void clientIsReady() throws IOException {
@@ -51,7 +65,6 @@ public class MorrisServer {
             readyCount++;
             System.out.println("클라이언트 READY 수신. 현재 readyCount: " + readyCount);
             if (readyCount == REQUIRED_PLAYERS) {
-                // 4. 모든 클라이언트가 READY 상태이므로 최종 시작 명령 전송
                 System.out.println("모든 플레이어가 준비 완료. GO 명령 전송.");
                 broadcastMessage("GO");
             }
@@ -62,6 +75,9 @@ public class MorrisServer {
         currentPlayerID = 3 - currentPlayerID; // 1<->2 전환
         Piece currentPlayer=Piece.fromServerID(currentPlayerID);
         broadcastMessage("TURN:" + currentPlayer);
+    }
+    public static void setCurrentPlayer(int i){
+        currentPlayerID=i;
     }
 
     public static synchronized void handleClientMove(GameMove move, int playerID) throws IOException {
@@ -78,7 +94,7 @@ public class MorrisServer {
                     MaxPlacedPiece
             );
             if(!canPlace) {
-                handlers.get(playerID-1).sendMessage("빈 공간을 선택해 주세요.");
+                sendMessageToPlayer(playerID,"빈 공간을 선택해 주세요.");
                 return;
             }
             masterGameBoard.placePiece(index,currentPlayer);
@@ -95,27 +111,26 @@ public class MorrisServer {
                 masterGameBoard.setPhase(GamePhase.MOVING);
             }
         }
-
         else if (phase == GamePhase.MOVING) {
             if (!selectedNodes.containsKey(playerID)) {
                 if (!masterGameBoard.isCurrentPlayerPiece(index,currentPlayer)) {
-                    handlers.get(playerID - 1).sendMessage("본인 돌을 선택해 주세요.");
+                    sendMessageToPlayer(playerID,"본인 돌을 선택해 주세요.");
                     return;
                 }
-                handlers.get(playerID - 1).sendMessage("Select Success:" + index);
+                sendMessageToPlayer(playerID,"Select Success:" + index);
                 selectedNodes.put(playerID, index);
                 masterGameBoard.setSelectedNode(index);
             } else {
                 int fromIndex = selectedNodes.get(playerID);
                 if (fromIndex == index) {
-                    handlers.get(playerID - 1).sendMessage("돌 선택을 취소합니다");
+                    sendMessageToPlayer(playerID,"돌 선택을 취소합니다");
                     selectedNodes.remove(playerID);
                     masterGameBoard.setSelectedNode(-1);
                     return;
                 }
                 boolean canMove = rule.canMove(fromIndex, index, masterGameBoard.getNodes());
                 if (!canMove) {
-                    broadcastMessage("이동할 수 없습니다. 다시 선택해 주세요.");
+                    sendMessageToPlayer(playerID,"이동할 수 없습니다. 다시 선택해 주세요.");
                     return;
                 }
                 masterGameBoard.movingPiece(fromIndex, index);
@@ -138,15 +153,14 @@ public class MorrisServer {
                 }
             }
         }
-
         else if (phase == GamePhase.REMOVE) {
             Piece[] nodes = masterGameBoard.getNodes();
             boolean canRemove=rule.canRemove(nodes,index,opponentPlayer);
             if (!canRemove){
                 if (rule.isInMill(index, nodes) && opponentPlayer == nodes[index]) {
-                    handlers.get(playerID - 1).sendMessage("Mill에 포함되어있습니다. 다른 돌을 먼저 선택해주세요.");
+                    sendMessageToPlayer(playerID,"Mill에 포함되어있습니다. 다른 돌을 먼저 선택해주세요.");
                 } else {
-                    handlers.get(playerID - 1).sendMessage("상대방 돌을 선택해주세요.");
+                    sendMessageToPlayer(playerID,"상대방 돌을 선택해주세요.");
                 }
                 return;
             }
@@ -155,6 +169,8 @@ public class MorrisServer {
             nodes=masterGameBoard.getNodes();
             if(masterGameBoard.getpiecesPlaced()>=MaxPlacedPiece && rule.isDefeat(opponentPlayer, nodes)){
                 broadcastMessage(opponentPlayer + "의 돌이 2개남았습니다. " + currentPlayer + " 승리🎉");
+                winner=playerID;
+                loser=3-playerID;
                 masterGameBoard.setPhase(GamePhase.END);
                 broadcastMessage("GAME END");
                 return;
@@ -174,28 +190,27 @@ public class MorrisServer {
                 broadcastMessage("MOVING Phase");
             }
         }
-
         else if (phase == GamePhase.JUMP) {
             Piece[] nodes = masterGameBoard.getNodes();
             if (!selectedNodes.containsKey(playerID)) {
                 if (!masterGameBoard.isCurrentPlayerPiece(index,currentPlayer)) {
-                    handlers.get(playerID - 1).sendMessage("본인 돌을 선택해 주세요.");
+                    sendMessageToPlayer(playerID,"본인 돌을 선택해 주세요.");
                     return;
                 }
-                handlers.get(playerID - 1).sendMessage("Select Success:" + index);
+                sendMessageToPlayer(playerID,"Select Success:" + index);
                 selectedNodes.put(playerID, index);
                 masterGameBoard.setSelectedNode(index);
             } else {
                 int fromIndex = selectedNodes.get(playerID);
                 if (fromIndex == index) {
-                    handlers.get(playerID - 1).sendMessage("돌 선택을 취소합니다");
+                    sendMessageToPlayer(playerID,"돌 선택을 취소합니다");
                     selectedNodes.remove(playerID);
                     masterGameBoard.setSelectedNode(-1);
                     return;
                 }
                 boolean canJump=rule.canJump(index,nodes);
                 if (!canJump) {
-                    broadcastMessage("이동할 수 없습니다. 다시 선택해 주세요.");
+                    sendMessageToPlayer(playerID,"이동할 수 없습니다. 다시 선택해 주세요.");
                     return;
                 }
                 masterGameBoard.jumpingPiece(fromIndex, index);
@@ -204,7 +219,7 @@ public class MorrisServer {
                 nodes = masterGameBoard.getNodes();
                 if (rule.isMill(index, nodes)) {
                     masterGameBoard.setPhase(GamePhase.REMOVE);
-                    broadcastMessage("Mill");
+                    broadcastMessage("Mill 성공💣");
                     return;
                 }
                 switchTurn();
@@ -220,6 +235,74 @@ public class MorrisServer {
             }
         else if (phase == GamePhase.END) {
             broadcastMessage("END");
+
+        }
+    }
+
+    public static void handleClientCommand(String clientCommand, int playerID) throws IOException {
+        String command = clientCommand;
+        if (masterGameBoard.getPhase() == GamePhase.END) {
+
+            if (command.equals("QUIT")) {
+                stopServer();
+                return;
+            }
+
+            if (command.equals("RESTART")) {
+                synchronized (restartLock) {
+                    playerReadyToRestart.put(playerID, true);
+                    System.out.println("플레이어 " + playerID + " 재시작 동의.");
+
+                    if (playerReadyToRestart.size() == 2 &&
+                            playerReadyToRestart.values().stream().allMatch(ready -> ready)) {
+
+                        broadcastMessage("GAME_RESTARTING");
+                        resetGame();
+                        System.out.println("게임 재시작 완료.");
+                    } else {
+                        sendMessageToPlayer(playerID, "대기 중: 상대방의 응답을 기다립니다.");
+                    }
+                }
+            }
+        }
+    }
+
+    private static void resetGame() throws IOException {
+        masterGameBoard.initializeBoard();
+        masterGameBoard.setPiecesPlaced(0);
+        masterGameBoard.setPhase(GamePhase.PLACING);
+
+        playerReadyToRestart.clear();
+        final int STARTING_PLAYER_ID = 1;
+        setCurrentPlayer(STARTING_PLAYER_ID);
+        Piece startPlayer=Piece.fromServerID(STARTING_PLAYER_ID);
+
+        System.out.println("게임 상태 초기화...");
+        broadcastMessage("GAME_RESTARTING"); // 클라이언트 UI 초기화 트리거
+        broadcastMessage("PLACING Phase");
+        broadcastMessage("TURN:" +startPlayer);
+    }
+    private static void stopServer() {
+        try {
+            broadcastMessage("SERVER_SHUTDOWN");
+            System.out.println("곧 서버를 종료합니다.");
+
+            for (PlayerHandler handler : handlers) {
+                handler.closeConnection();
+            }
+            handlers.clear();
+
+            if (serverSocket != null && !serverSocket.isClosed()) {
+                serverSocket.close();
+                System.out.println("서버 소켓이 닫혔습니다.");
+            }
+
+            System.out.println("서버 프로그램이 안전하게 종료됩니다.");
+            System.exit(0);
+
+        } catch (IOException e) {
+            System.err.println("서버 종료 중 오류 발생: " + e.getMessage());
+            System.exit(1);
         }
     }
 }

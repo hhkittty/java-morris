@@ -1,9 +1,4 @@
-package morris;
-
-/*import static morris.GamePhase.END;
-import static morris.GamePhase.JUMP_BLACK;
-import static morris.GamePhase.JUMP_WHITE;
-import static morris.GamePhase.REMOVE;*/  //enum은 static으로 import x unum만 import 해서쓰기
+package morris.view;
 
 import java.awt.Color;
 import java.awt.Dimension;
@@ -12,6 +7,10 @@ import java.awt.Point;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import javax.swing.JPanel;
+import morris.model.GameBoard;
+import morris.controller.GameMove;
+import morris.controller.MorrisClient;
+import morris.model.Piece;
 
 public class BoardView extends JPanel {
     private final MorrisClient client;

@@ -1,10 +1,12 @@
-package morris;
+package morris.controller;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
+import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
+import morris.model.Piece;
 
 public class MorrisClient {
     private Socket socket;
@@ -12,6 +14,7 @@ public class MorrisClient {
     private ObjectInputStream input;
     private GameFrame gameFrame;
     int playerID = -1;
+    private static String winnerMessage=null;
 
     public MorrisClient(String serverAddress, int port) throws IOException {
         System.out.println("서버에 연결 시도 중...");
@@ -83,6 +86,11 @@ public class MorrisClient {
             System.err.println("게임 이동 전송 실패: " + e.getMessage());
         }
     }
+    public void sendMessage(String message) throws IOException {
+        output.writeObject(message);
+        output.flush();
+        System.out.println(message+"전송");
+    }
 
     private void startListeningThread() {
         new Thread(() -> {
@@ -93,24 +101,22 @@ public class MorrisClient {
                     if (receivedData instanceof String) {
                         String serverMessage = (String) receivedData;
                         System.out.println("<< 서버 응답 >> " + serverMessage);
-
                         if (serverMessage.contains("PLACING Success")) {
-                            System.out.println("화면 업데이트.");
                             String[] parts = serverMessage.split(";");
                             Piece piece = Piece.valueOf(parts[0]);
                             int index = Integer.parseInt(parts[1]);
                             updatePlacing(index, piece);
                         }
-                        if (serverMessage.contains("Select")) {
+                        else if (serverMessage.contains("Select")) {
                             System.out.println("선택 성공");
                             String[] parts = serverMessage.split(":");
                             updateSelected(Integer.parseInt(parts[1]));
                         }
-                        if (serverMessage.contains("취소")) {
+                        else if (serverMessage.contains("취소")) {
                             System.out.println("선택 취소");
                             updateCancle();
                         }
-                        if(serverMessage.contains("Move Success")){
+                        else if(serverMessage.contains("Move Success")){
                             System.out.println("이동 성공");
                             String[] parts = serverMessage.split(":");
                             String[]index=parts[1].split("to");
@@ -119,7 +125,7 @@ public class MorrisClient {
                             updateMoving(fromIndex, toIndex);
                             updateCancle();
                         }
-                        if(serverMessage.contains("REMOVE")){
+                        else if(serverMessage.contains("REMOVE")){
                             String[] parts = serverMessage.split(":");
                             updateRemove(Integer.parseInt(parts[1]));
                             if(Integer.parseInt(parts[2])==playerID){
@@ -129,7 +135,7 @@ public class MorrisClient {
                                 System.out.println("😢돌이 제거 당했어요");
                             }
                         }
-                        if (serverMessage.contains("Jump Success")){
+                        else if (serverMessage.contains("Jump Success")){
                             System.out.println("이동 성공");
                             String[] parts = serverMessage.split(":");
                             String[]index=parts[1].split("to");
@@ -138,8 +144,35 @@ public class MorrisClient {
                             updateJumping(fromIndex, toIndex);
                             updateCancle();
                         }
-                        if(serverMessage.contains("END")){
+                        else if(serverMessage.contains("END")){
                             System.out.println("END");
+                            Object[] options = {"재시작", "종료"};
+                            int choice = JOptionPane.showOptionDialog(
+                                    null, // Parent component
+                                    winnerMessage,
+                                    "게임 종료",
+                                    JOptionPane.YES_NO_OPTION,
+                                    JOptionPane.INFORMATION_MESSAGE,
+                                    null,
+                                    options,
+                                    options[0] // Default button
+                            );
+
+                            if (choice == JOptionPane.YES_OPTION) { // "재시작" 선택
+                                sendMessage("RESTART");
+                            } else if (choice == JOptionPane.NO_OPTION) { // "종료" 선택
+                                sendMessage("QUIT");
+                                closeConnection();
+                            }
+                        }
+                        else if(serverMessage.contains("승리")){
+                           winnerMessage=winnerMessage(serverMessage);
+                        }
+                        else if(serverMessage.contains("RESTART")){
+                            resetGame();
+                        }
+                        else if(serverMessage.contains("QUIT")){
+                            closeConnection();
                         }
                     }
 
@@ -150,13 +183,32 @@ public class MorrisClient {
         }).start();
     }
 
+    public void closeConnection() {
+        try {
+            if (output != null) {
+                output.close();
+            }
+            if (input != null) {
+                input.close();
+            }
+            if (socket != null && !socket.isClosed()) {
+                socket.close();
+                System.out.println("서버와의 연결이 성공적으로 종료되었습니다.");
+            }
+            gameFrame.dispose();
+            System.exit(0);
+
+        } catch (IOException e) {
+            System.err.println("클라이언트 연결 종료 중 오류 발생: " + e.getMessage());
+        }
+    }
+
     private void updatePlacing(int index, Piece pieceType) {
         SwingUtilities.invokeLater(() -> {
             gameFrame.getGameBoard().updatePiece(index, pieceType);
             gameFrame.getBoardView().repaint();
         });
     }
-
     private void updateSelected(int index) {
         SwingUtilities.invokeLater(() -> {
             gameFrame.getGameBoard().setSelectedNode(index);
@@ -190,5 +242,17 @@ public class MorrisClient {
     }
     private void setGameFrame(GameFrame gameFrame) {
         this.gameFrame = gameFrame;
+    }
+    private void resetGame(){
+        SwingUtilities.invokeLater(() -> {
+            for(int i=0;i<24;i++){
+                gameFrame.getGameBoard().updatePiece(i,Piece.NONE);
+                gameFrame.getBoardView().repaint();
+            }
+        });
+    }
+    private String winnerMessage(String serverMessage) {
+        String[] winnerMessage=serverMessage.split("\\.");
+        return winnerMessage[1];
     }
 }

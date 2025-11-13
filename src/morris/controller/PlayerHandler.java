@@ -1,4 +1,4 @@
-package morris;
+package morris.controller;
 
 import java.io.EOFException;
 import java.io.IOException;
@@ -28,11 +28,9 @@ public class PlayerHandler implements Runnable {
         output.writeObject(message);
         output.flush();
     }
-
-    public String receiveMessage() throws IOException, ClassNotFoundException {
-        return input.readObject().toString();
+    public void closeConnection() throws IOException {
+        clientSocket.close();
     }
-
     @Override
     public void run() {
         try {
@@ -52,8 +50,7 @@ public class PlayerHandler implements Runnable {
                 }
             }
             while(true) {
-                Object receivedObject = input.readObject(); // GameMove 객체 수신
-
+                Object receivedObject = input.readObject();
                 if (receivedObject instanceof GameMove) {
                     GameMove move = (GameMove) receivedObject;
 
@@ -63,6 +60,10 @@ public class PlayerHandler implements Runnable {
                     }
 
                     MorrisServer.handleClientMove(move, this.playerID);
+                }
+                else if(receivedObject instanceof String) {
+                    String clientCommand = (String) receivedObject;
+                    MorrisServer.handleClientCommand(clientCommand, playerID);
                 }
             }
 
