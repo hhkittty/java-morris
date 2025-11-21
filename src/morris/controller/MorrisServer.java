@@ -31,7 +31,7 @@ public class MorrisServer {
     private static int loser=0;
 
     public static void main(String[] args) throws IOException {
-        serverSocket = new ServerSocket(9000); // 9000번 포트
+        serverSocket = new ServerSocket(9000);
         System.out.println("나인 맨스 모리스 서버 시작...");
 
         Socket player1 = serverSocket.accept(); // 첫 번째 플레이어 대기

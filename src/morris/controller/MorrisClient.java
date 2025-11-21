@@ -40,7 +40,7 @@ public class MorrisClient {
         if (args.length > 0) {
             serverAddress = args[0];
         } else {
-            serverAddress = "localhost";
+            serverAddress = "192.168.219.112";
         }
 
         SwingUtilities.invokeLater(() -> {
